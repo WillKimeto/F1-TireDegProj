@@ -1,2 +1,5 @@
 f1_env/
 __pycache__/
+f1_cache/
+*.sqlite
+*.dll
