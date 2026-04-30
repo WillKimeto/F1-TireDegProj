@@ -1,0 +1,25 @@
+Driver,Constructor,MeanScore,StdScore,BestScore,WorstScore,RacesScored,FlaggedRaces,TrendSlope,TrendLabel,Percentile
+ZHO,Kick Sauber,69.88,17.12,91.8,32.86,24,22,-0.3138,Declining,100.0
+BEA,Haas F1 Team,68.89,13.97,84.57,50.64,3,2,1.6768,Improving,95.8
+COL,Williams,67.7,19.37,99.09,39.94,9,6,-3.7335,Declining,91.7
+HAM,Mercedes,62.99,19.59,100.0,16.66,24,9,0.3387,Improving,87.5
+SAI,Ferrari,61.67,18.81,100.0,20.42,23,9,0.0882,Stable,83.3
+PER,Red Bull Racing,60.9,22.14,100.0,0.0,24,14,-0.3755,Declining,79.2
+DOO,Alpine,60.21,0.0,60.21,60.21,1,1,0.0,Stable,75.0
+NOR,McLaren,59.67,21.24,100.0,13.04,24,10,-0.3068,Declining,70.8
+LEC,Ferrari,59.46,22.65,92.8,11.74,24,10,0.7697,Improving,66.7
+MAG,Haas F1 Team,56.81,22.98,89.28,15.38,22,17,-0.3738,Declining,62.5
+VER,Red Bull Racing,56.2,21.15,82.34,0.0,24,9,0.8443,Improving,58.3
+RUS,Mercedes,55.55,22.73,99.22,1.56,24,11,-0.0115,Stable,54.2
+PIA,McLaren,55.04,20.53,86.61,12.99,24,9,0.2655,Stable,50.0
+HUL,Haas F1 Team,53.05,27.31,100.0,0.0,24,17,0.5413,Improving,45.8
+GAS,Alpine,52.78,24.2,95.58,0.0,24,19,-0.5033,Declining,41.7
+OCO,Alpine,51.62,18.27,86.98,7.69,23,20,-0.1316,Stable,37.5
+LAW,RB,50.92,22.58,82.68,19.14,6,5,1.6277,Improving,33.3
+STR,Aston Martin,50.9,26.96,97.4,0.0,24,18,-0.1562,Stable,29.2
+BOT,Kick Sauber,49.72,25.3,96.68,0.0,24,23,0.3183,Improving,25.0
+ALO,Aston Martin,47.42,22.14,97.24,7.22,24,15,0.101,Stable,20.8
+SAR,Williams,47.1,26.26,94.12,3.12,13,11,-1.0009,Declining,16.7
+RIC,RB,46.84,25.53,89.66,0.0,18,14,2.1868,Improving,12.5
+ALB,Williams,40.35,26.55,74.73,0.0,24,20,0.2529,Stable,8.3
+TSU,RB,37.62,22.05,80.07,5.26,24,20,-0.246,Stable,4.2

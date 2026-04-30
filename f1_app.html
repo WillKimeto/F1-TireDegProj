@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Beyond the Pitlane | F1 Analytics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
+<style>
+/* ── Base ──────────────────────────────────────────────────────── */
+body {
+  background-color: #0f1010;
+  /* Subtle dot grid — structural texture, not decorative gradient */
+  background-image: radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 28px 28px;
+  font-family: 'Space Grotesk', sans-serif;
+  color: #e2e2e2;
+}
+
+/* ── Reduced motion compliance ─────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Surface hierarchy (3 levels, no cards everywhere) ────────── */
+/* Level 1: page background — #0f1010 */
+/* Level 2: section surface — #161818 — used sparingly for major panels */
+/* Level 3: raised element — #1e2020 — controls, inputs */
+
+.surface {
+  background: #161818;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+.surface-raised {
+  background: #1e2020;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ── Typography scale ──────────────────────────────────────────── */
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ── Section toggling ──────────────────────────────────────────── */
+.section-hidden { display: none; }
+
+/* ── Loading bar — only shown during fetch, not decorative ─────── */
+.fetch-bar {
+  height: 2px;
+  background: #00D2FE;
+  width: 0%;
+  transition: width 0.4s ease;
+  border-radius: 0 1px 1px 0;
+}
+.fetch-bar.running { animation: fetchProgress 1.4s ease-in-out infinite alternate; }
+@keyframes fetchProgress { from { width: 30%; } to { width: 85%; } }
+
+/* ── Spinner ───────────────────────────────────────────────────── */
+.spinner {
+  width: 20px; height: 20px;
+  border: 2px solid rgba(255,255,255,0.08);
+  border-top-color: #E10600;
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  display: inline-block; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Toast ─────────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 88px; right: 20px; z-index: 9999;
+  padding: 9px 16px; border-radius: 6px; font-size: 12px;
+  background: #1e2020; border: 1px solid rgba(255,255,255,0.08);
+  color: #ccc; transform: translateY(12px); opacity: 0;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+  pointer-events: none; max-width: 280px;
+  font-family: 'JetBrains Mono', monospace;
+}
+#toast.show  { transform: translateY(0); opacity: 1; }
+#toast.error   { border-color: rgba(225,6,0,0.5);   color: #ff7070; }
+#toast.success { border-color: rgba(0,210,254,0.4);  color: #00D2FE; }
+
+/* ── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+/* ── Nav states ────────────────────────────────────────────────── */
+/* Active indicator uses BOTH color AND underline (not color alone) */
+.nav-link { padding-bottom: 3px; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
+.nav-link.active { color: #E10600; border-bottom-color: #E10600; }
+.nav-link:not(.active) { color: #666; }
+.nav-link:not(.active):hover { color: #aaa; }
+
+.side-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; font-size: 13px; font-weight: 500;
+  color: #555; border-left: 2px solid transparent;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  touch-action: manipulation; cursor: pointer;
+  min-height: 44px; /* touch target */
+}
+.side-link:hover  { color: #ccc; background: rgba(255,255,255,0.03); }
+.side-link.active { color: #E10600; border-left-color: #E10600; background: rgba(225,6,0,0.06); }
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn-primary {
+  background: #E10600; color: #fff;
+  font-weight: 700; font-size: 11px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  border: none; border-radius: 4px;
+  padding: 9px 20px; cursor: pointer;
+  touch-action: manipulation;
+  min-height: 44px; min-width: 44px;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn-primary:hover   { background: #ff1a47; }
+.btn-primary:active  { opacity: 0.85; }
+.btn-primary:focus-visible { outline: 2px solid #E10600; outline-offset: 3px; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-secondary {
+  background: rgba(0,210,254,0.1);
+  border: 1px solid rgba(0,210,254,0.25);
+  color: #00D2FE;
+  font-weight: 600; font-size: 11px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  border-radius: 4px; padding: 9px 16px; cursor: pointer;
+  touch-action: manipulation; min-height: 44px;
+  transition: background 0.15s;
+}
+.btn-secondary:hover  { background: rgba(0,210,254,0.18); }
+.btn-secondary:focus-visible { outline: 2px solid #00D2FE; outline-offset: 3px; }
+
+.btn-icon {
+  background: none; border: none; cursor: pointer;
+  color: #555; padding: 8px; border-radius: 4px;
+  touch-action: manipulation; min-width: 44px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+.btn-icon:hover  { color: #ccc; background: rgba(255,255,255,0.05); }
+.btn-icon:focus-visible { outline: 2px solid #E10600; outline-offset: 2px; }
+
+/* ── Form controls ─────────────────────────────────────────────── */
+.field-select, .field-input {
+  background: #1e2020;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px; color: #e2e2e2;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px; padding: 8px 12px;
+  width: 100%; outline: none;
+  min-height: 40px;
+  transition: border-color 0.15s;
+}
+.field-select:focus, .field-input:focus { border-color: #E10600; }
+.field-select option { background: #1e2020; }
+
+/* ── Sub-tabs — color + weight + underline (not color alone) ───── */
+.sub-tab {
+  font-size: 11px; font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: #444; padding: 8px 14px;
+  background: none; border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer; touch-action: manipulation; min-height: 36px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.sub-tab:hover { color: #888; }
+.sub-tab.active { color: #00D2FE; border-bottom-color: #00D2FE; font-weight: 700; }
+.sub-tab:focus-visible { outline: 2px solid #00D2FE; outline-offset: -2px; }
+
+/* ── Divider ───────────────────────────────────────────────────── */
+.divider { height: 1px; background: rgba(255,255,255,0.06); }
+
+/* ── Stat row — replaces metric cards for simple numbers ────────── */
+/* Used for the four top-line stats per section                      */
+.stat-row { display: flex; gap: 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.stat-cell {
+  flex: 1; padding: 16px 20px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+.stat-cell:last-child { border-right: none; }
+.stat-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #555; margin-bottom: 6px; }
+.stat-value { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 500; color: #e2e2e2; line-height: 1; }
+.stat-sub   { font-size: 10px; color: #444; margin-top: 4px; }
+
+/* ── Podium strip — replaces three glass cards ─────────────────── */
+.podium-strip { display: flex; gap: 0; }
+.podium-item {
+  flex: 1; padding: 20px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+}
+.podium-item:last-child { border-right: none; }
+.podium-item::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+}
+.podium-item.p1::before { background: #FFD700; }
+.podium-item.p2::before { background: #C0C0C0; }
+.podium-item.p3::before { background: #CD7F32; }
+.podium-pos   { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: #555; margin-bottom: 8px; }
+.podium-driver{ font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+.podium-team  { font-size: 11px; color: #555; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+.podium-prob  { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 500; }
+.podium-bar   { height: 2px; background: rgba(255,255,255,0.06); border-radius: 1px; overflow: hidden; margin-top: 8px; }
+.podium-fill  { height: 100%; border-radius: 1px; transition: width 0.7s ease; }
+
+/* ── Progress bar (score) — solid color, no gradient ───────────── */
+.score-bar-wrap { display: flex; align-items: center; gap: 8px; }
+.score-bar-bg   { flex: 1; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+.score-bar-fill { height: 100%; border-radius: 2px; background: #E10600; }
+
+/* ── Probability bar ────────────────────────────────────────────── */
+.prob-bar-bg  { height: 2px; background: rgba(255,255,255,0.06); border-radius: 1px; overflow: hidden; margin-top: 6px; }
+.prob-bar-fill{ height: 100%; border-radius: 1px; transition: width 0.7s ease; }
+
+/* ── Trend badges — color + icon (not color alone) ──────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; padding: 2px 7px; border-radius: 3px;
+  font-weight: 600; letter-spacing: 0.05em;
+}
+.badge-up     { background: rgba(0,210,254,0.1);  color: #00D2FE; }
+.badge-down   { background: rgba(225,6,0,0.1);    color: #E10600; }
+.badge-stable { background: rgba(255,255,255,0.05); color: #666; }
+
+/* ── Chart area ─────────────────────────────────────────────────── */
+.chart-region { position: relative; width: 100%; }
+
+/* ── Section header ─────────────────────────────────────────────── */
+.section-label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: #444;
+  padding: 12px 0 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 16px;
+}
+
+/* ── Table ──────────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table th {
+  text-align: left; padding: 8px 12px;
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: #444; font-weight: 500;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.data-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: #ccc;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* ── Controls strip ─────────────────────────────────────────────── */
+.controls-strip {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.field-group { display: flex; flex-direction: column; gap: 5px; min-width: 140px; }
+.field-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #444; }
+
+/* ── Heatmap table ──────────────────────────────────────────────── */
+.heatmap-wrap { overflow-x: auto; }
+.heatmap-table { border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 10px; min-width: 500px; }
+.heatmap-table th {
+  padding: 4px 6px; color: #444; font-weight: 400;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.heatmap-table td {
+  padding: 4px 6px; text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.heatmap-table .driver-col { text-align: left; color: #ccc; white-space: nowrap; }
+.heatmap-table .race-header { writing-mode: vertical-rl; height: 64px; vertical-align: bottom; white-space: nowrap; }
+</style>
+
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "primary-container": "#e10600",
+        "secondary-container": "#00d2fe",
+        "on-secondary": "#003543",
+        "surface-container": "#1e2020",
+        "on-surface": "#e2e2e2",
+        "surface-container-low": "#161818",
+        "background": "#0f1010"
+      }
+    }
+  }
+}
+</script>
+</head>
+
+<body>
+<!-- Skip link for keyboard users -->
+<a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-[#E10600] focus:text-white focus:px-3 focus:py-2 focus:rounded focus:text-sm">Skip to main content</a>
+
+<!-- ═══════════════════════════════ TOP NAV ═══════════════════════════════ -->
+<header role="banner" class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-14 bg-[#0a0b0b]/90 backdrop-blur-xl border-b border-white/[0.07]">
+  <div class="flex items-center gap-8">
+    <span class="text-lg font-bold uppercase italic text-white tracking-tight" aria-label="Beyond the Pitlane">
+      Beyond the <span class="text-[#E10600]">Pitlane</span>
+    </span>
+    <nav class="hidden md:flex items-center gap-1" id="top-nav" aria-label="Module navigation">
+      <a href="#" role="tab" aria-selected="true"  class="nav-link active text-sm font-medium tracking-tight px-3 py-1" data-section="tires">Tires</a>
+      <a href="#" role="tab" aria-selected="false" class="nav-link text-sm font-medium tracking-tight px-3 py-1" data-section="predictor">Predictor</a>
+      <a href="#" role="tab" aria-selected="false" class="nav-link text-sm font-medium tracking-tight px-3 py-1" data-section="conversion">Conversion</a>
+    </nav>
+  </div>
+  <div class="flex items-center gap-1">
+    <div id="api-status" class="flex items-center gap-2 text-xs mono text-[#444] mr-3" aria-live="polite" aria-label="API connection status">
+      <span class="w-2 h-2 rounded-full bg-[#333]" id="status-dot" aria-hidden="true"></span>
+      <span id="status-text">Connecting...</span>
+    </div>
+    <button onclick="triggerTraining()" class="btn-icon" aria-label="Train ML model" title="Train ML model">
+      <span class="material-symbols-outlined text-[18px]" aria-hidden="true">model_training</span>
+    </button>
+    <button class="btn-icon" aria-label="Settings" title="Settings">
+      <span class="material-symbols-outlined text-[18px]" aria-hidden="true">settings</span>
+    </button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════ SIDEBAR ═══════════════════════════════ -->
+<aside class="hidden lg:flex flex-col fixed left-0 top-14 h-[calc(100vh-56px)] z-40 w-56 bg-[#0a0b0b] border-r border-white/[0.07]" aria-label="Application sidebar">
+  <div class="flex flex-col h-full">
+
+    <!-- Global selectors -->
+    <div class="p-4 space-y-3 border-b border-white/[0.06]">
+      <div class="field-group">
+        <label for="global-year" class="field-label">Season</label>
+        <select id="global-year" class="field-select">
+          <option value="2026">2026</option>
+          <option value="2025" selected>2025</option>
+          <option value="2024">2024</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label for="global-race" class="field-label">Grand Prix</label>
+        <select id="global-race" class="field-select">
+          <option value="">Loading calendar...</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Module nav -->
+    <nav class="flex-1 py-2" id="side-nav" aria-label="Module navigation">
+      <a href="#" class="side-link active" data-section="tires" aria-current="page">
+        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">tire_repair</span>
+        <span>Tire Analyzer</span>
+      </a>
+      <a href="#" class="side-link" data-section="predictor">
+        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">leaderboard</span>
+        <span>Winner Predictor</span>
+      </a>
+      <a href="#" class="side-link" data-section="conversion">
+        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">speed</span>
+        <span>Pace Converter</span>
+      </a>
+    </nav>
+
+    <!-- Bottom actions -->
+    <div class="p-4 border-t border-white/[0.06] space-y-2">
+      <button onclick="syncLiveData()" class="btn-secondary w-full flex items-center justify-center gap-2" aria-label="Sync live data from FastF1">
+        <span class="material-symbols-outlined text-[16px]" aria-hidden="true">sync</span>
+        Live Data Sync
+      </button>
+      <a href="http://localhost:8000/docs" target="_blank" rel="noopener noreferrer"
+         class="flex items-center gap-2 px-3 py-2 text-xs text-[#444] hover:text-[#888] transition-colors"
+         aria-label="Open API documentation in new tab">
+        <span class="material-symbols-outlined text-[14px]" aria-hidden="true">api</span>
+        API Docs
+      </a>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════ MAIN ═══════════════════════════════ -->
+<main id="main-content" class="lg:ml-56 mt-14 min-h-screen" tabindex="-1">
+
+<!-- ────────────────────── FETCH PROGRESS BAR ──────────────────── -->
+<div role="progressbar" aria-label="Loading" aria-hidden="true" class="h-[2px] bg-[#0a0b0b]">
+  <div id="fetch-bar" class="fetch-bar"></div>
+</div>
+
+<!-- ════════════════════════════ TIRE DEGRADATION ════════════════ -->
+<section id="section-tires" aria-labelledby="tire-heading" class="pb-16 md:pb-0">
+
+  <!-- Section header -->
+  <div class="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
+    <div>
+      <h1 id="tire-heading" class="text-xl font-bold text-white">Tire Degradation Analyzer</h1>
+      <p class="text-xs text-[#555] mt-1">Degradation rates, stint curves and driver comparisons from FastF1.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-[#444] border border-white/[0.07] px-2 py-1 rounded-sm">FastF1</span>
+      <span class="w-1.5 h-1.5 rounded-full bg-[#00D2FE] animate-pulse" aria-label="Live data" title="Live data"></span>
+    </div>
+  </div>
+
+  <!-- Controls strip -->
+  <div class="controls-strip" role="group" aria-label="Tire analysis controls">
+    <div class="field-group">
+      <label for="tire-compound" class="field-label">Compound</label>
+      <select id="tire-compound" class="field-select">
+        <option value="MEDIUM">Medium</option>
+        <option value="SOFT">Soft</option>
+        <option value="HARD">Hard</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label for="tire-d1" class="field-label">Driver 1</label>
+      <select id="tire-d1" class="field-select"></select>
+    </div>
+    <div class="field-group">
+      <label for="tire-d2" class="field-label">Driver 2</label>
+      <select id="tire-d2" class="field-select"></select>
+    </div>
+    <button onclick="loadTireData()" id="btn-tire" class="btn-primary" aria-label="Run tire analysis">Analyze</button>
+  </div>
+
+  <!-- Stat row — replaces four cards -->
+  <div class="stat-row" id="tire-stats" role="region" aria-label="Tire analysis summary">
+    <div class="stat-cell">
+      <div class="stat-label">Avg Deg Rate</div>
+      <div class="stat-value mono" id="m-avg-deg" aria-live="polite">—</div>
+      <div class="stat-sub">s / lap</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Best Manager</div>
+      <div class="stat-value mono" id="m-best" aria-live="polite">—</div>
+      <div class="stat-sub" id="m-best-rate">—</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Worst Manager</div>
+      <div class="stat-value mono" id="m-worst" aria-live="polite">—</div>
+      <div class="stat-sub" id="m-worst-rate">—</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Max Stint</div>
+      <div class="stat-value mono" id="m-max-stint" aria-live="polite">—</div>
+      <div class="stat-sub">laps observed</div>
+    </div>
+  </div>
+
+  <!-- Sub-tabs -->
+  <div class="flex border-b border-white/[0.06] px-6" role="tablist" aria-label="Tire analysis views">
+    <button class="sub-tab active" data-tire-tab="curves" role="tab" aria-selected="true"  aria-controls="tire-tab-curves">Curves</button>
+    <button class="sub-tab"        data-tire-tab="ranking" role="tab" aria-selected="false" aria-controls="tire-tab-ranking">Ranking</button>
+    <button class="sub-tab"        data-tire-tab="dvd"     role="tab" aria-selected="false" aria-controls="tire-tab-dvd">Dvd</button>
+    <button class="sub-tab"        data-tire-tab="heatmap" role="tab" aria-selected="false" aria-controls="tire-tab-heatmap">Heatmap</button>
+  </div>
+
+  <!-- Tab: Curves -->
+  <div id="tire-tab-curves" role="tabpanel" aria-labelledby="tab-curves" class="p-6">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <div class="section-label" style="padding-top:0">Lap Time Delta from Stint Lap 1</div>
+        <p class="text-[11px] text-[#444]">Median across all drivers · individual traces behind</p>
+      </div>
+      <div class="flex gap-4 text-[11px] text-[#555]" id="tire-curves-legend" aria-label="Chart legend"></div>
+    </div>
+    <div class="chart-region" style="height:260px;">
+      <canvas id="chart-tire-curves" aria-label="Tire degradation curves line chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Tab: Ranking -->
+  <div id="tire-tab-ranking" role="tabpanel" class="p-6" style="display:none">
+    <div class="section-label" style="padding-top:0">Driver Degradation Rate Ranking <span class="text-[#555] font-normal normal-case tracking-normal">— lower s/lap = better tyre management</span></div>
+    <div class="chart-region" id="tire-ranking-wrap" style="height:340px;">
+      <canvas id="chart-tire-ranking" aria-label="Driver degradation ranking horizontal bar chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Tab: Driver vs Driver -->
+  <div id="tire-tab-dvd" role="tabpanel" class="p-6" style="display:none">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+      <div>
+        <div class="section-label" style="padding-top:0">Raw Lap Times</div>
+        <div class="chart-region" style="height:220px;">
+          <canvas id="chart-dvd-times" aria-label="Driver vs driver lap times comparison"></canvas>
+        </div>
+      </div>
+      <div>
+        <div class="section-label" style="padding-top:0">Degradation Delta</div>
+        <div class="chart-region" style="height:220px;">
+          <canvas id="chart-dvd-delta" aria-label="Driver vs driver degradation delta comparison"></canvas>
+        </div>
+      </div>
+    </div>
+    <!-- DvD stats — inline row, not cards -->
+    <div class="stat-row" id="dvd-metrics"></div>
+  </div>
+
+  <!-- Tab: Heatmap -->
+  <div id="tire-tab-heatmap" role="tabpanel" class="p-6" style="display:none">
+    <div class="section-label" style="padding-top:0">Season Degradation Heatmap <span class="text-[#555] font-normal normal-case tracking-normal">— deg rate s/lap per race</span></div>
+    <div class="heatmap-wrap" id="heatmap-container">
+      <p class="text-[#444] text-xs">Run an analysis first to populate the heatmap.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════ RACE PREDICTOR ══════════════════ -->
+<section id="section-predictor" class="section-hidden pb-16 md:pb-0" aria-labelledby="pred-heading">
+
+  <div class="px-6 py-5 border-b border-white/[0.06] flex items-center gap-4">
+    <span class="w-0.5 h-7 bg-[#E10600]" aria-hidden="true"></span>
+    <div>
+      <h1 id="pred-heading" class="text-xl font-bold text-white">Race Winner Predictor</h1>
+      <p class="text-xs text-[#555] mt-1">Ensemble model combining statistical pace ranking and XGBoost ranker.</p>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-strip" role="group" aria-label="Predictor controls">
+    <div class="field-group">
+      <label for="pred-model" class="field-label">Model</label>
+      <select id="pred-model" class="field-select">
+        <option value="ensemble">Ensemble (Stat + ML)</option>
+        <option value="statistical">Statistical only</option>
+        <option value="ml">ML only</option>
+      </select>
+    </div>
+    <button onclick="loadPrediction()" id="btn-pred" class="btn-primary" aria-label="Run race prediction">Run Prediction</button>
+    <div class="ml-auto flex items-center gap-2 text-[11px] text-[#444] mono" aria-live="polite">
+      <span id="pred-model-status"></span>
+    </div>
+  </div>
+
+  <!-- Podium strip — flat, border-divided, no card wrapper -->
+  <div class="border-b border-white/[0.06]" aria-label="Predicted podium" role="region">
+    <div class="podium-strip" id="pred-podium">
+      <div style="flex:1;padding:20px;text-align:center;">
+        <p class="text-[#444] text-xs">Run a prediction to see the podium.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts — two columns, flow directly below podium -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-0 border-b border-white/[0.06]">
+    <div class="p-6 border-r border-white/[0.06]">
+      <div class="section-label" style="padding-top:0">Driver Win Probability <span class="text-[#444] font-normal normal-case tracking-normal">— top 12</span></div>
+      <div class="chart-region" id="pred-drivers-wrap" style="height:320px;">
+        <canvas id="chart-pred-drivers" aria-label="Driver win probability horizontal bar chart"></canvas>
+      </div>
+    </div>
+    <div class="p-6">
+      <div class="section-label" style="padding-top:0">Constructor Probability</div>
+      <div class="chart-region" style="height:320px;">
+        <canvas id="chart-pred-constructors" aria-label="Constructor probability bar chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session pace deltas — full width, below grid -->
+  <div class="p-6 border-t border-white/[0.06]">
+    <div class="flex items-center justify-between mb-4">
+      <div class="section-label" style="padding-top:0;margin-bottom:0">Session Pace Deltas</div>
+      <div class="flex gap-5 text-[11px] text-[#555]" id="pred-pace-legend" aria-label="Session legend"></div>
+    </div>
+    <div class="chart-region" style="height:220px;">
+      <canvas id="chart-pred-pace" aria-label="Session pace delta grouped bar chart"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════ PACE CONVERSION ═════════════════ -->
+<section id="section-conversion" class="section-hidden pb-16 md:pb-0" aria-labelledby="conv-heading">
+
+  <div class="px-6 py-5 border-b border-white/[0.06]">
+    <h1 id="conv-heading" class="text-xl font-bold text-white">Pace Converter <span class="text-[#00D2FE] font-light">Quali → Race</span></h1>
+    <p class="text-xs text-[#555] mt-1">How well each driver translates qualifying pace into race performance.</p>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-strip" role="group" aria-label="Conversion analysis controls">
+    <div class="field-group">
+      <label for="conv-sort" class="field-label">Sort By</label>
+      <select id="conv-sort" class="field-select">
+        <option value="score">Conversion Score</option>
+        <option value="pace">Pace Score</option>
+        <option value="position">Position Score</option>
+        <option value="trend">Trend</option>
+      </select>
+    </div>
+    <button onclick="loadConversion()" id="btn-conv" class="btn-primary" aria-label="Run conversion analysis">Analyze</button>
+  </div>
+
+  <!-- Stat row — inline, not cards -->
+  <div class="stat-row" role="region" aria-label="Conversion summary statistics">
+    <div class="stat-cell">
+      <div class="stat-label">Field Average</div>
+      <div class="stat-value mono" id="c-avg" aria-live="polite">—</div>
+      <div class="stat-sub">conversion score</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Top Converter</div>
+      <div class="stat-value mono" id="c-top" aria-live="polite">—</div>
+      <div class="stat-sub">best this season</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Improving</div>
+      <div class="stat-value mono" id="c-improving" aria-live="polite">—</div>
+      <div class="stat-sub">drivers trending up</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Races Scored</div>
+      <div class="stat-value mono" id="c-races" aria-live="polite">—</div>
+      <div class="stat-sub">total rounds</div>
+    </div>
+  </div>
+
+  <!-- Sub-tabs -->
+  <div class="flex border-b border-white/[0.06] px-6" role="tablist" aria-label="Conversion analysis views">
+    <button class="sub-tab active" data-conv-tab="overview" role="tab" aria-selected="true"  aria-controls="conv-tab-overview">Overview</button>
+    <button class="sub-tab"        data-conv-tab="scatter"  role="tab" aria-selected="false" aria-controls="conv-tab-scatter">Pace vs Pos</button>
+    <button class="sub-tab"        data-conv-tab="trend"    role="tab" aria-selected="false" aria-controls="conv-tab-trend">Driver Trend</button>
+    <button class="sub-tab"        data-conv-tab="table"    role="tab" aria-selected="false" aria-controls="conv-tab-table">Rankings Table</button>
+  </div>
+
+  <!-- Tab: Overview -->
+  <div id="conv-tab-overview" role="tabpanel" class="p-6">
+    <div class="flex items-center justify-between mb-4">
+      <div class="section-label" style="padding-top:0;margin-bottom:0">Season Conversion Rankings</div>
+      <div class="flex gap-5 text-[11px]" aria-label="Trend legend">
+        <span class="flex items-center gap-1 text-[#00D2FE]">↑ Improving</span>
+        <span class="flex items-center gap-1 text-[#D4A017]">→ Stable</span>
+        <span class="flex items-center gap-1 text-[#E10600]">↓ Declining</span>
+      </div>
+    </div>
+    <div class="chart-region" id="conv-overview-wrap" style="height:340px;">
+      <canvas id="chart-conv-overview" aria-label="Driver conversion score horizontal bar chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Tab: Scatter -->
+  <div id="conv-tab-scatter" role="tabpanel" class="p-6" style="display:none">
+    <div class="flex items-center justify-between mb-4">
+      <div class="section-label" style="padding-top:0;margin-bottom:0">Pace Score vs Position Score</div>
+      <span class="text-[11px] text-[#444]">Top-right = elite converters</span>
+    </div>
+    <div class="chart-region" style="height:340px;">
+      <canvas id="chart-conv-scatter" aria-label="Scatter plot of pace score versus position score"></canvas>
+    </div>
+  </div>
+
+  <!-- Tab: Trend -->
+  <div id="conv-tab-trend" role="tabpanel" class="p-6" style="display:none">
+    <div class="controls-strip mb-6" style="padding:0 0 16px 0; border-bottom:1px solid rgba(255,255,255,0.05);" role="group" aria-label="Driver trend controls">
+      <div class="field-group">
+        <label for="conv-trend-driver" class="field-label">Driver</label>
+        <select id="conv-trend-driver" class="field-select" onchange="renderConvTrend()"></select>
+      </div>
+    </div>
+    <div class="section-label" style="padding-top:0">Conversion Score — Race by Race</div>
+    <div class="chart-region" style="height:260px;">
+      <canvas id="chart-conv-trend" aria-label="Driver conversion score trend across season"></canvas>
+    </div>
+  </div>
+
+  <!-- Tab: Rankings Table -->
+  <div id="conv-tab-table" role="tabpanel" class="p-6" style="display:none">
+    <div class="section-label" style="padding-top:0">Full Rankings Table</div>
+    <div class="overflow-x-auto">
+      <table class="data-table" aria-label="Driver conversion score rankings">
+        <thead>
+          <tr>
+            <th scope="col">Pos</th>
+            <th scope="col">Driver</th>
+            <th scope="col">Constructor</th>
+            <th scope="col">Score</th>
+            <th scope="col">Pctile</th>
+            <th scope="col">Pace</th>
+            <th scope="col">Position</th>
+            <th scope="col">Trend</th>
+            <th scope="col">Races</th>
+            <th scope="col">Flags</th>
+          </tr>
+        </thead>
+        <tbody id="conv-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- Toast notification -->
+<div id="toast" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
+<!-- FAB — mobile only -->
+<button onclick="cycleSection()" class="fixed bottom-20 right-4 w-12 h-12 bg-[#E10600] text-white rounded-full flex items-center justify-center shadow-lg hover:bg-[#ff1a47] active:scale-95 transition-all z-50 lg:hidden" aria-label="Switch module" touch-action="manipulation">
+  <span class="material-symbols-outlined text-[20px]" aria-hidden="true">analytics</span>
+</button>
+
+<!-- Mobile bottom nav -->
+<nav class="md:hidden fixed bottom-0 w-full h-14 bg-[#0a0b0b]/95 backdrop-blur-xl border-t border-white/[0.07] flex items-center justify-around px-4 z-50" aria-label="Mobile module navigation">
+  <a href="#" class="flex flex-col items-center gap-0.5 text-[#E10600] min-w-[44px] min-h-[44px] justify-center" onclick="showSection('tires');return false;" aria-label="Tire Analyzer" touch-action="manipulation">
+    <span class="material-symbols-outlined text-[20px]" aria-hidden="true">tire_repair</span>
+    <span class="text-[9px] uppercase tracking-widest">Tires</span>
+  </a>
+  <a href="#" class="flex flex-col items-center gap-0.5 text-[#444] min-w-[44px] min-h-[44px] justify-center" onclick="showSection('predictor');return false;" aria-label="Winner Predictor" touch-action="manipulation">
+    <span class="material-symbols-outlined text-[20px]" aria-hidden="true">leaderboard</span>
+    <span class="text-[9px] uppercase tracking-widest">Predict</span>
+  </a>
+  <a href="#" class="flex flex-col items-center gap-0.5 text-[#444] min-w-[44px] min-h-[44px] justify-center" onclick="showSection('conversion');return false;" aria-label="Pace Converter" touch-action="manipulation">
+    <span class="material-symbols-outlined text-[20px]" aria-hidden="true">speed</span>
+    <span class="text-[9px] uppercase tracking-widest">Pace</span>
+  </a>
+</nav>
+
+<!-- ═══════════════════════════════ JS ═══════════════════════════════════ -->
+<script>
+const API = 'http://localhost:8000';
+const COMPOUND_COLORS = { SOFT: '#E8002D', MEDIUM: '#D4A017', HARD: '#888888' };
+
+// ── State ──────────────────────────────────────────────────────────────
+let charts   = {};
+let convData = null;
+let currentSection = 'tires';
+const sections = ['tires', 'predictor', 'conversion'];
+
+// ── Utilities ──────────────────────────────────────────────────────────
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = ''; }, 3000);
+}
+
+function fetchBar(running) {
+  const bar = document.getElementById('fetch-bar');
+  if (running) {
+    bar.classList.add('running');
+    bar.style.width = '';
+  } else {
+    bar.classList.remove('running');
+    bar.style.width = '100%';
+    setTimeout(() => { bar.style.transition = 'width 0.3s'; bar.style.width = '0%'; setTimeout(() => { bar.style.transition = ''; }, 350); }, 200);
+  }
+}
+
+function setButtonLoading(id, loading) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) {
+    btn._text = btn.textContent;
+    btn.innerHTML = `<span class="spinner" aria-hidden="true"></span>`;
+    btn.setAttribute('aria-busy', 'true');
+  } else {
+    btn.innerHTML = btn._text || btn.innerHTML;
+    btn.removeAttribute('aria-busy');
+  }
+}
+
+async function apiFetch(path) {
+  const res = await fetch(API + path);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || res.statusText);
+  }
+  return res.json();
+}
+
+function getYear() { return document.getElementById('global-year').value; }
+function getRace() { return document.getElementById('global-race').value; }
+
+// ── API health ─────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    await apiFetch('/health');
+    document.getElementById('status-dot').style.background = '#00D2FE';
+    document.getElementById('status-text').textContent = 'API Connected';
+    toast('API connected', 'success');
+  } catch {
+    document.getElementById('status-dot').style.background = '#E10600';
+    document.getElementById('status-text').textContent = 'API Offline';
+    toast('API offline — is uvicorn running?', 'error');
+  }
+}
+
+// ── Calendar ───────────────────────────────────────────────────────────
+async function loadCalendar() {
+  const year = getYear();
+  try {
+    const data = await apiFetch(`/calendar/${year}`);
+    const sel = document.getElementById('global-race');
+    sel.innerHTML = data.races.map(r => `<option value="${r}">${r.replace(' Grand Prix', '')}</option>`).join('');
+  } catch (e) {
+    document.getElementById('global-race').innerHTML = '<option>Calendar unavailable</option>';
+    toast('Calendar error: ' + e.message, 'error');
+  }
+}
+
+// ── Section navigation ─────────────────────────────────────────────────
+function showSection(name) {
+  currentSection = name;
+  sections.forEach(s => {
+    const sec = document.getElementById(`section-${s}`);
+    sec.classList.toggle('section-hidden', s !== name);
+  });
+  document.querySelectorAll('.nav-link').forEach(el => {
+    const active = el.dataset.section === name;
+    el.classList.toggle('active', active);
+    el.setAttribute('aria-selected', active);
+  });
+  document.querySelectorAll('.side-link').forEach(el => {
+    const active = el.dataset.section === name;
+    el.classList.toggle('active', active);
+    el.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+}
+
+function cycleSection() {
+  showSection(sections[(sections.indexOf(currentSection) + 1) % sections.length]);
+}
+
+// ── Driver selects ─────────────────────────────────────────────────────
+function populateTireDrivers() {
+  const drivers = ['VER','NOR','LEC','PIA','RUS','HAM','SAI','ALO','GAS','STR','ALB','TSU','HUL','MAG','BOT','ZHO','OCO','BEA','ANT','DOO'];
+  const teams   = {VER:'Red Bull',NOR:'McLaren',LEC:'Ferrari',PIA:'McLaren',RUS:'Mercedes',HAM:'Ferrari',SAI:'Williams',ALO:'Aston Martin',GAS:'Alpine',STR:'Aston Martin',ALB:'Williams',TSU:'RB',HUL:'Haas',MAG:'Haas',BOT:'Sauber',ZHO:'Sauber',OCO:'Alpine',BEA:'Alpine',ANT:'Mercedes',DOO:'RB'};
+  ['tire-d1','tire-d2'].forEach(id => {
+    document.getElementById(id).innerHTML = drivers.map(d => `<option value="${d}">${d} — ${teams[d]}</option>`).join('');
+  });
+  document.getElementById('tire-d1').value = 'NOR';
+  document.getElementById('tire-d2').value = 'LEC';
+}
+
+// ── TIRE ───────────────────────────────────────────────────────────────
+async function loadTireData() {
+  const year = getYear(), race = getRace();
+  const compound = document.getElementById('tire-compound').value;
+  if (!race) { toast('Select a Grand Prix first', 'error'); return; }
+
+  setButtonLoading('btn-tire', true);
+  fetchBar(true);
+  toast('Loading tire data...');
+
+  try {
+    const [analysis, dvd, heatmap] = await Promise.all([
+      apiFetch(`/tire/analyze?year=${year}&race=${encodeURIComponent(race)}&compound=${compound}`),
+      apiFetch(`/tire/dvd?year=${year}&race=${encodeURIComponent(race)}&compound=${compound}&d1=${document.getElementById('tire-d1').value}&d2=${document.getElementById('tire-d2').value}`),
+      apiFetch(`/tire/heatmap?year=${year}&compound=${compound}&max_races=10`)
+    ]);
+    updateTireStats(analysis);
+    renderTireCurves(analysis, compound);
+    renderTireRanking(analysis, compound);
+    renderDvD(dvd, compound);
+    renderHeatmap(heatmap);
+    fetchBar(false);
+    toast('Tire analysis complete', 'success');
+  } catch (e) {
+    fetchBar(false);
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    setButtonLoading('btn-tire', false);
+  }
+}
+
+function updateTireStats(data) {
+  document.getElementById('m-avg-deg').textContent  = data.avg_deg_rate.toFixed(4) + 's';
+  document.getElementById('m-best').textContent     = data.best_manager;
+  document.getElementById('m-worst').textContent    = data.worst_manager;
+  document.getElementById('m-max-stint').textContent= data.max_stint_laps;
+  const best  = data.driver_rates.find(d => d.driver === data.best_manager);
+  const worst = data.driver_rates.find(d => d.driver === data.worst_manager);
+  if (best)  document.getElementById('m-best-rate').textContent  = best.deg_rate.toFixed(4) + 's/lap';
+  if (worst) document.getElementById('m-worst-rate').textContent = worst.deg_rate.toFixed(4) + 's/lap';
+}
+
+function renderTireCurves(data, compound) {
+  const color  = COMPOUND_COLORS[compound] || '#E10600';
+  const labels = data.degradation_curve.map(p => p.stint_lap);
+  const values = data.degradation_curve.map(p => p.median_delta);
+  document.getElementById('tire-curves-legend').innerHTML =
+    `<span class="flex items-center gap-2"><span style="display:inline-block;width:20px;height:2px;background:${color}"></span>Median ${compound}</span>`;
+
+  destroyChart('tire-curves');
+  charts['tire-curves'] = new Chart(document.getElementById('chart-tire-curves'), {
+    type: 'line',
+    data: { labels, datasets: [{ label: `Median ${compound}`, data: values, borderColor: color, borderWidth: 2.5, pointRadius: 0, tension: 0.35, fill: { target:'origin', above: color+'14' } }] },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: c => `Δ ${c.raw.toFixed(3)}s` } } },
+      scales:{
+        x:{ title:{ display:true, text:'Stint Lap', color:'#444', font:{size:10} }, ticks:{ color:'#444', font:{size:10} }, grid:{ color:'rgba(255,255,255,0.03)' } },
+        y:{ title:{ display:true, text:'Δ from lap 1 (s)', color:'#444', font:{size:10} }, ticks:{ color:'#444', font:{size:10} }, grid:{ color:'rgba(255,255,255,0.03)' } }
+      }
+    }
+  });
+}
+
+function renderTireRanking(data, compound) {
+  const color  = COMPOUND_COLORS[compound] || '#E10600';
+  const sorted = [...data.driver_rates].sort((a,b) => a.deg_rate - b.deg_rate);
+  document.getElementById('tire-ranking-wrap').style.height = Math.max(300, sorted.length * 30 + 60) + 'px';
+  destroyChart('tire-ranking');
+  charts['tire-ranking'] = new Chart(document.getElementById('chart-tire-ranking'), {
+    type: 'bar',
+    data: { labels: sorted.map(d=>d.driver), datasets:[{ data: sorted.map(d=>d.deg_rate), backgroundColor: sorted.map((_,i)=>i<3?color+'cc':color+'33'), borderColor: sorted.map((_,i)=>i<3?color:color+'66'), borderWidth:1, borderRadius:2 }] },
+    options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: c => c.raw.toFixed(4)+' s/lap' } } },
+      scales:{
+        x:{ title:{ display:true, text:'s/lap', color:'#444', font:{size:10} }, ticks:{ color:'#444', font:{size:10} }, grid:{ color:'rgba(255,255,255,0.03)' } },
+        y:{ ticks:{ color:'#ccc', font:{ size:11, family:'JetBrains Mono' } }, grid:{ display:false } }
+      }
+    }
+  });
+}
+
+function renderDvD(data, compound) {
+  const color  = COMPOUND_COLORS[compound] || '#E10600';
+  const maxLen = Math.max(data.driver1_laps.length, data.driver2_laps.length);
+  const labels = Array.from({length:maxLen}, (_,i)=>i+1);
+  const pad    = (arr, key) => labels.map(l => arr.find(p=>p.stint_lap===l)?.[key] ?? null);
+
+  const lineOpts = { responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ display:true, labels:{ color:'#666', font:{size:10,family:'JetBrains Mono'}, boxWidth:12, boxHeight:2 } } },
+    scales:{ x:{ ticks:{color:'#444',font:{size:10}}, grid:{color:'rgba(255,255,255,0.03)'} }, y:{ ticks:{color:'#444',font:{size:10}}, grid:{color:'rgba(255,255,255,0.03)'} } }
+  };
+
+  destroyChart('dvd-times');
+  charts['dvd-times'] = new Chart(document.getElementById('chart-dvd-times'), {
+    type:'line', data:{ labels, datasets:[
+      { label:data.driver1, data:pad(data.driver1_laps,'lap_time'),  borderColor:color,       borderWidth:2, pointRadius:0, tension:0.3, spanGaps:true },
+      { label:data.driver2, data:pad(data.driver2_laps,'lap_time'),  borderColor:color+'66',  borderWidth:2, pointRadius:0, tension:0.3, borderDash:[5,3], spanGaps:true }
+    ]}, options: lineOpts
+  });
+
+  destroyChart('dvd-delta');
+  charts['dvd-delta'] = new Chart(document.getElementById('chart-dvd-delta'), {
+    type:'line', data:{ labels, datasets:[
+      { label:data.driver1, data:pad(data.driver1_laps,'delta_from_lap1'), borderColor:color,      borderWidth:2, pointRadius:0, tension:0.3, spanGaps:true },
+      { label:data.driver2, data:pad(data.driver2_laps,'delta_from_lap1'), borderColor:color+'66', borderWidth:2, pointRadius:0, tension:0.3, borderDash:[5,3], spanGaps:true }
+    ]}, options: { ...lineOpts, scales:{ ...lineOpts.scales, y:{ ...lineOpts.scales.y, title:{ display:true, text:'Δ from lap 1 (s)', color:'#444', font:{size:10} } } } }
+  });
+
+  const diff = Math.abs(data.driver1_deg_rate - data.driver2_deg_rate).toFixed(4);
+  document.getElementById('dvd-metrics').innerHTML = [
+    { label:data.driver1+' Deg Rate', val:data.driver1_deg_rate.toFixed(4)+'s', sub:'per lap' },
+    { label:data.driver2+' Deg Rate', val:data.driver2_deg_rate.toFixed(4)+'s', sub:'per lap' },
+    { label:'Difference',             val:diff+'s',                              sub:data.better_manager+' manages better' },
+    { label:'Stint Length',           val:data.driver1_laps.length+' vs '+data.driver2_laps.length, sub:'laps each' }
+  ].map(m=>`<div class="stat-cell"><div class="stat-label">${m.label}</div><div class="stat-value mono">${m.val}</div><div class="stat-sub">${m.sub}</div></div>`).join('');
+}
+
+function renderHeatmap(data) {
+  const c = document.getElementById('heatmap-container');
+  if (!data.cells.length) { c.innerHTML = '<p class="text-[#444] text-xs">No heatmap data.</p>'; return; }
+  const color = COMPOUND_COLORS[data.compound] || '#E10600';
+  const rates = data.cells.map(x=>x.deg_rate).filter(v=>v!=null);
+  const minV = Math.min(...rates), maxV = Math.max(...rates);
+
+  let html = `<table class="heatmap-table"><thead><tr><th class="driver-col" scope="col">Driver</th>`;
+  data.races.forEach(r => { html += `<th class="race-header" scope="col"><span>${r.replace(' Grand Prix','')}</span></th>`; });
+  html += '</tr></thead><tbody>';
+  data.drivers.forEach(driver => {
+    html += `<tr><td class="driver-col">${driver}</td>`;
+    data.races.forEach(race => {
+      const cell = data.cells.find(x=>x.driver===driver&&x.race_name===race);
+      const val  = cell?.deg_rate;
+      if (val != null) {
+        const t  = (val-minV)/(maxV-minV||1);
+        const alpha = Math.round((0.1+t*0.75)*255).toString(16).padStart(2,'0');
+        html += `<td style="background:${color}${alpha}">${val.toFixed(2)}</td>`;
+      } else { html += `<td style="color:#333">—</td>`; }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  c.innerHTML = html;
+}
+
+// ── PREDICTOR ─────────────────────────────────────────────────────────
+async function loadPrediction() {
+  const year = getYear(), race = getRace();
+  const model = document.getElementById('pred-model').value;
+  if (!race) { toast('Select a Grand Prix first', 'error'); return; }
+
+  setButtonLoading('btn-pred', true);
+  fetchBar(true);
+  toast('Running prediction...');
+
+  try {
+    const data = await apiFetch(`/predict/race?year=${year}&race=${encodeURIComponent(race)}&model=${model}`);
+    document.getElementById('pred-model-status').textContent =
+      (data.model_loaded ? 'ML loaded' : 'Stat only') + ` · ${data.sessions_used}/4 sessions`;
+    renderPodium(data.podium);
+    renderDriverProbs(data.all_drivers);
+    renderConstructorProbs(data.constructors);
+    renderSessionPace(data.session_deltas);
+    fetchBar(false);
+    toast('Prediction complete', 'success');
+  } catch (e) {
+    fetchBar(false);
+    toast('Prediction error: ' + e.message, 'error');
+  } finally {
+    setButtonLoading('btn-pred', false);
+  }
+}
+
+function renderPodium(podium) {
+  const colors  = ['#FFD700','#C0C0C0','#CD7F32'];
+  const classes = ['p1','p2','p3'];
+  document.getElementById('pred-podium').innerHTML = podium.slice(0,3).map((d,i)=>`
+    <div class="podium-item ${classes[i]}">
+      <div class="podium-pos">${['P1','P2','P3'][i]}</div>
+      <div class="podium-driver" style="color:${colors[i]}">${d.driver}</div>
+      <div class="podium-team">${d.constructor}</div>
+      <div class="podium-prob" style="color:${colors[i]}">${d.win_probability.toFixed(1)}%</div>
+      <div class="podium-bar"><div class="podium-fill" style="width:${d.win_probability}%;background:${colors[i]}"></div></div>
+    </div>`).join('');
+}
+
+function renderDriverProbs(drivers) {
+  const top12 = drivers.slice(0,12);
+  document.getElementById('pred-drivers-wrap').style.height = Math.max(320, top12.length*32+60) + 'px';
+  destroyChart('pred-drivers');
+  charts['pred-drivers'] = new Chart(document.getElementById('chart-pred-drivers'), {
+    type:'bar',
+    data:{ labels:top12.map(d=>d.driver), datasets:[{ data:top12.map(d=>d.win_probability),
+      backgroundColor:top12.map((_,i)=>i<3?['rgba(255,215,0,0.6)','rgba(192,192,192,0.5)','rgba(205,127,50,0.55)'][i]:'rgba(225,6,0,0.25)'),
+      borderColor:top12.map((_,i)=>i<3?['#FFD700','#C0C0C0','#CD7F32'][i]:'#E10600'),
+      borderWidth:1, borderRadius:2 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:c=>c.raw.toFixed(1)+'%' } } },
+      scales:{ x:{ ticks:{color:'#444',font:{size:10}}, grid:{color:'rgba(255,255,255,0.03)'} }, y:{ ticks:{color:'#ccc',font:{size:11,family:'JetBrains Mono'}}, grid:{display:false} } } }
+  });
+}
+
+function renderConstructorProbs(constructors) {
+  destroyChart('pred-constructors');
+  charts['pred-constructors'] = new Chart(document.getElementById('chart-pred-constructors'), {
+    type:'bar',
+    data:{ labels:constructors.map(c=>c.constructor), datasets:[{ data:constructors.map(c=>c.win_probability),
+      backgroundColor:constructors.map((_,i)=>i===0?'rgba(225,6,0,0.55)':'rgba(255,255,255,0.06)'),
+      borderColor:constructors.map((_,i)=>i===0?'#E10600':'rgba(255,255,255,0.12)'),
+      borderWidth:1, borderRadius:2 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:c=>c.raw.toFixed(1)+'%' } } },
+      scales:{ x:{ ticks:{color:'#444',font:{size:9},maxRotation:30}, grid:{color:'rgba(255,255,255,0.03)'} }, y:{ ticks:{color:'#444',font:{size:10}}, grid:{color:'rgba(255,255,255,0.03)'} } } }
+  });
+}
+
+function renderSessionPace(deltas) {
+  const sessions = [
+    {key:'q_delta',   label:'Quali', color:'#E10600'},
+    {key:'fp3_delta', label:'FP3',   color:'#D4A017'},
+    {key:'fp2_delta', label:'FP2',   color:'#00D2FE'},
+    {key:'fp1_delta', label:'FP1',   color:'#4488ff'},
+  ];
+  document.getElementById('pred-pace-legend').innerHTML = sessions.map(s=>
+    `<span class="flex items-center gap-1.5"><span style="display:inline-block;width:16px;height:2px;background:${s.color}"></span>${s.label}</span>`).join('');
+  const top10 = deltas.slice(0,10);
+  destroyChart('pred-pace');
+  charts['pred-pace'] = new Chart(document.getElementById('chart-pred-pace'), {
+    type:'bar',
+    data:{ labels:top10.map(d=>d.driver), datasets: sessions.map(s=>({ label:s.label, data:top10.map(d=>d[s.key]??null), backgroundColor:s.color+'44', borderColor:s.color, borderWidth:1, borderRadius:2 })) },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ mode:'index' } },
+      scales:{ x:{ ticks:{color:'#444',font:{size:10}}, grid:{display:false} }, y:{ title:{display:true,text:'Delta (s)',color:'#444',font:{size:10}}, ticks:{color:'#444',font:{size:10}}, grid:{color:'rgba(255,255,255,0.03)'} } } }
+  });
+}
+
+// ── CONVERSION ────────────────────────────────────────────────────────
+async function loadConversion() {
+  const year = getYear();
+  setButtonLoading('btn-conv', true);
+  fetchBar(true);
+  toast('Loading conversion scores...');
+
+  try {
+    convData = await apiFetch(`/conversion/season?year=${year}`);
+    document.getElementById('c-avg').textContent       = convData.field_average.toFixed(1);
+    document.getElementById('c-top').textContent       = convData.top_converter;
+    document.getElementById('c-improving').textContent = convData.improving_count;
+    document.getElementById('c-races').textContent     = convData.total_races;
+
+    const dSel = document.getElementById('conv-trend-driver');
+    dSel.innerHTML = convData.drivers.map(d=>`<option value="${d.driver}">${d.driver} — ${d.constructor}</option>`).join('');
+
+    renderConvOverview();
+    renderConvScatter();
+    renderConvTable();
+    fetchBar(false);
+    toast('Conversion analysis complete', 'success');
+  } catch (e) {
+    fetchBar(false);
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    setButtonLoading('btn-conv', false);
+  }
+}
+
+function getSortedDrivers() {
+  if (!convData) return [];
+  const sort = document.getElementById('conv-sort').value;
+  return [...convData.drivers].sort((a,b)=>{
+    if (sort==='pace')     return b.pace_score_avg     - a.pace_score_avg;
+    if (sort==='position') return b.position_score_avg - a.position_score_avg;
+    if (sort==='trend')    return b.trend_slope        - a.trend_slope;
+    return b.mean_score - a.mean_score;
+  });
+}
+
+function renderConvOverview() {
+  if (!convData) return;
+  const sorted = getSortedDrivers();
+  const tc = {Improving:'#00D2FE', Stable:'#D4A017', Declining:'#E10600'};
+  document.getElementById('conv-overview-wrap').style.height = Math.max(320, sorted.length*30+60)+'px';
+  destroyChart('conv-overview');
+  charts['conv-overview'] = new Chart(document.getElementById('chart-conv-overview'), {
+    type:'bar',
+    data:{ labels:sorted.map(d=>d.driver), datasets:[{ data:sorted.map(d=>d.mean_score),
+      backgroundColor:sorted.map(d=>(tc[d.trend_label]||'#888')+'44'),
+      borderColor:sorted.map(d=>tc[d.trend_label]||'#888'),
+      borderWidth:1, borderRadius:2 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:c=>c.raw.toFixed(1)+' score' } } },
+      scales:{ x:{ min:0, max:100, ticks:{color:'#444',font:{size:10}}, grid:{color:'rgba(255,255,255,0.03)'} }, y:{ ticks:{color:'#ccc',font:{size:11,family:'JetBrains Mono'}}, grid:{display:false} } } }
+  });
+}
+
+function renderConvScatter() {
+  if (!convData) return;
+  destroyChart('conv-scatter');
+  charts['conv-scatter'] = new Chart(document.getElementById('chart-conv-scatter'), {
+    type:'scatter',
+    data:{ datasets:[{ label:'Drivers', data:convData.drivers.map(d=>({x:d.pace_score_avg,y:d.position_score_avg,label:d.driver})),
+      backgroundColor:'#E1060099', borderColor:'#E10600', pointRadius:6, pointHoverRadius:9 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>`${c.raw.label}: pace ${c.raw.x.toFixed(1)} · pos ${c.raw.y.toFixed(1)}` } } },
+      scales:{
+        x:{ min:0, max:100, title:{display:true,text:'Pace Score',color:'#444',font:{size:11}}, ticks:{color:'#444'}, grid:{color:'rgba(255,255,255,0.04)'} },
+        y:{ min:0, max:100, title:{display:true,text:'Position Score',color:'#444',font:{size:11}}, ticks:{color:'#444'}, grid:{color:'rgba(255,255,255,0.04)'} }
+      } }
+  });
+}
+
+function renderConvTrend() {
+  if (!convData) return;
+  const driverCode = document.getElementById('conv-trend-driver').value;
+  const d = convData.drivers.find(x=>x.driver===driverCode) || convData.drivers[0];
+  if (!d) return;
+  const tc = {Improving:'#00D2FE', Stable:'#D4A017', Declining:'#E10600'}[d.trend_label] || '#666';
+  destroyChart('conv-trend');
+  charts['conv-trend'] = new Chart(document.getElementById('chart-conv-trend'), {
+    type:'line',
+    data:{ labels:d.race_names.map(r=>r.replace(' Grand Prix','')), datasets:[
+      { label:'Score', data:d.race_scores, borderColor:'#E10600', borderWidth:2.5, pointRadius:3, pointBackgroundColor:'#E10600', tension:0.3, fill:false },
+      { label:'Trend', data:d.race_names.map((_,i)=>Math.min(100,Math.max(0, d.mean_score+d.trend_slope*(i-d.race_names.length/2)))),
+        borderColor:tc+'77', borderWidth:1.5, borderDash:[6,4], pointRadius:0, tension:0, fill:false }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales:{
+        x:{ ticks:{color:'#444',font:{size:9,family:'JetBrains Mono'},maxRotation:45,autoSkip:false}, grid:{color:'rgba(255,255,255,0.03)'} },
+        y:{ min:0, max:100, ticks:{color:'#444',font:{size:10}}, grid:{color:'rgba(255,255,255,0.03)'} }
+      } }
+  });
+}
+
+function renderConvTable() {
+  if (!convData) return;
+  const sorted = getSortedDrivers();
+  const tc = {Improving:'badge-up', Stable:'badge-stable', Declining:'badge-down'};
+  const ts = {Improving:'↑ Improving', Stable:'→ Stable', Declining:'↓ Declining'};
+  document.getElementById('conv-table-body').innerHTML = sorted.map((d,i)=>`
+    <tr>
+      <td class="text-[#555] mono">${i+1}</td>
+      <td class="font-bold mono">${d.driver}</td>
+      <td class="text-[#555] text-[11px]">${d.constructor}</td>
+      <td>
+        <div class="score-bar-wrap">
+          <div class="score-bar-bg w-16"><div class="score-bar-fill" style="width:${d.mean_score}%"></div></div>
+          <span class="mono text-[11px]">${d.mean_score.toFixed(1)}</span>
+        </div>
+      </td>
+      <td class="mono text-[11px]">${d.percentile.toFixed(0)}th</td>
+      <td class="mono text-[11px]">${d.pace_score_avg.toFixed(1)}</td>
+      <td class="mono text-[11px]">${d.position_score_avg.toFixed(1)}</td>
+      <td><span class="badge ${tc[d.trend_label]||'badge-stable'}">${ts[d.trend_label]||'→'}</span></td>
+      <td class="mono text-[11px]">${d.races_scored}</td>
+      <td>${d.flagged_races>0?`<span class="badge badge-down">${d.flagged_races} flagged</span>`:'<span style="color:#333">—</span>'}</td>
+    </tr>`).join('');
+}
+
+// ── Misc ───────────────────────────────────────────────────────────────
+async function syncLiveData() {
+  toast('Syncing calendar...');
+  await loadCalendar();
+  toast('Calendar updated', 'success');
+}
+
+async function triggerTraining() {
+  toast('Training started — check server logs');
+  try {
+    await apiFetch('/predict/train');
+    toast('Training running in background', 'success');
+  } catch (e) {
+    toast('Training error: ' + e.message, 'error');
+  }
+}
+
+// ── Sub-tab switching ──────────────────────────────────────────────────
+document.querySelectorAll('[data-tire-tab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-tire-tab]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
+    btn.classList.add('active'); btn.setAttribute('aria-selected','true');
+    ['curves','ranking','dvd','heatmap'].forEach(t => {
+      const el = document.getElementById(`tire-tab-${t}`);
+      if (el) el.style.display = t===btn.dataset.tireTab ? 'block' : 'none';
+    });
+  });
+});
+
+document.querySelectorAll('[data-conv-tab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-conv-tab]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
+    btn.classList.add('active'); btn.setAttribute('aria-selected','true');
+    ['overview','scatter','trend','table'].forEach(t => {
+      const el = document.getElementById(`conv-tab-${t}`);
+      if (el) el.style.display = t===btn.dataset.convTab ? 'block' : 'none';
+    });
+    const tab = btn.dataset.convTab;
+    if (tab==='overview') renderConvOverview();
+    if (tab==='scatter')  renderConvScatter();
+    if (tab==='trend')    renderConvTrend();
+    if (tab==='table')    renderConvTable();
+  });
+});
+
+document.querySelectorAll('.nav-link, .side-link').forEach(el => {
+  el.addEventListener('click', e => { e.preventDefault(); showSection(el.dataset.section); });
+});
+
+document.getElementById('global-year').addEventListener('change', loadCalendar);
+
+// ── Init ───────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  Chart.defaults.color       = '#444';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.04)';
+  Chart.defaults.font.family = 'Space Grotesk';
+  populateTireDrivers();
+  await checkHealth();
+  await loadCalendar();
+});
+</script>
+</body>
+</html>
