@@ -3,3 +3,7 @@ __pycache__/
 f1_cache/
 *.sqlite
 *.dll
+f1_env/
+f1_cache/
+*.sqlite
+*.dll
