@@ -723,7 +723,9 @@ tailwind.config = {
 
 <!-- ═══════════════════════════════ JS ═══════════════════════════════════ -->
 <script>
-const API = 'http://localhost:8000';
+const API = window.location.origin === 'http://localhost:8000' || window.location.origin.includes('localhost')
+    ? 'http://localhost:8000'
+    : 'https://beyond-the-pitlane.onrender.com';
 const COMPOUND_COLORS = { SOFT: '#E8002D', MEDIUM: '#D4A017', HARD: '#888888' };
 
 // ── State ──────────────────────────────────────────────────────────────
