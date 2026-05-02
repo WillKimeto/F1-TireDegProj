@@ -1,9 +1,38 @@
+# Virtual environment
 f1_env/
+
+# FastF1 data cache — can be several GB
+f1_cache/
+
+# Trained ML model files — large and environment-specific
+*.pkl
+predictor_outputs/
+tire_analysis_outputs/
+conversion_outputs/
+
+# Python cache
 __pycache__/
-f1_cache/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables
+.env
+.env.local
+
+# Database files
 *.sqlite
+*.db
+
+# Windows system files
 *.dll
-f1_env/
-f1_cache/
-*.sqlite
-*.dll
+Thumbs.db
+desktop.ini
+
+# VS Code
+.vscode/
+
+# Byte-compiled
+*.egg-info/
+dist/
+build/
